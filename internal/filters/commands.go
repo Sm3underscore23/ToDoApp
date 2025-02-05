@@ -1,16 +1,37 @@
 package filters
 
-import "github.com/go-telegram/bot/models"
+import (
+	"todoApp/internal/states"
+	"todoApp/internal/texts"
 
-const (
-	start = "/start"
-	help  = "/help"
+	"github.com/go-telegram/bot/models"
 )
 
 func IsStart(update *models.Update) bool {
-	return update.Message != nil && update.Message.Text == start
+	return update.Message != nil && update.Message.Text == texts.StartCommand
+}
+
+func IsNewEvent(update *models.Update) bool {
+	return update.Message != nil && update.Message.Text == texts.NewEventCommand
+}
+
+func IsAdd(update *models.Update) bool {
+	if update.Message == nil {
+		return false
+	}
+	for key := range texts.NewEventTexts {
+		if key == update.Message.Text {
+			return true
+		}
+	}
+	return false
+}
+
+func CheckState(update *models.Update) bool {
+	userID := update.Message.From.ID
+	return states.GetState(userID) != ""
 }
 
 func IsHelp(update *models.Update) bool {
-	return update.Message != nil && update.Message.Text == help
+	return update.Message != nil && update.Message.Text == texts.HelpCommand
 }
