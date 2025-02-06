@@ -52,7 +52,7 @@ func AddEvent(ctx context.Context, b *bot.Bot, update *models.Update) {
 	errorSend := func() {
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
-			Text:   "Ошибка формата",
+			Text:   "Ошибка формата или ",
 		})
 	}
 
@@ -94,7 +94,8 @@ func AddEvent(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 	var userDataSlc []string
 
-	var dataY, datam, dataD, dataH, dataM int
+	var dataY, datam, dataD int
+	var dataHM string
 
 	var err error
 
@@ -122,45 +123,46 @@ func AddEvent(ctx context.Context, b *bot.Bot, update *models.Update) {
 			userDataSlc = strings.SplitN(userDataLine, " ", 3)
 		}
 
-		datam, err = strconv.Atoi(strings.Split(userDataSlc[0], ".")[1])
+		m := strings.Split(userDataSlc[0], ".")[len(userDataSlc)-2]
+		fmt.Println(m)
+		mParse, err := time.Parse("2006-01-02", fmt.Sprintf("2006-%s-02", m))
 		if err != nil {
 			errorSend()
 			return
 		}
 
+		datam = int(mParse.Month())
+
 		fallthrough
 
-	case texts.ThisMounth, texts.ThisWeek:
+	case texts.ThisMounth:
 
-		fmt.Println("Case ThisMounth || ThisWeek")
+		fmt.Println("Case ThisMounth")
 
 		if state != texts.Castom && state != texts.ThisYear {
 			userDataSlc = strings.SplitN(userDataLine, " ", 3)
 		}
 
-		dataD, err = strconv.Atoi(userDataSlc[0])
+		var dParse time.Time
+		d := strings.Split(userDataSlc[0], ".")[0]
+		dParse, err = time.Parse("2006-01-02", fmt.Sprintf("2006-01-%s", d))
 		if err != nil {
+			fmt.Println("Parse err")
 			errorSend()
 			return
 		}
+		dataD = dParse.Day()
+
+		fallthrough
 
 	case texts.Today:
 
 		fmt.Println("Case Today")
-
-		userDataSlc = strings.SplitN(userDataLine, " ", 2)
-
-		dataH, err = strconv.Atoi(strings.Split(userDataSlc[0], ":")[0])
-		if err != nil {
-			errorSend()
-			return
+		if state == texts.Today {
+			userDataSlc = strings.SplitN(userDataLine, " ", 2)
 		}
 
-		dataM, err = strconv.Atoi(strings.Split(userDataSlc[0], ":")[1])
-		if err != nil {
-			errorSend()
-			return
-		}
+		dataHM = userDataSlc[len(userDataSlc)-2]
 
 	default:
 		b.SendMessage(ctx, &bot.SendMessageParams{
@@ -173,7 +175,7 @@ func AddEvent(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 	eventTitle := userDataSlc[len(userDataSlc)-1]
 
-	chekTime := func(a, b time.Time) bool {
+	checkTime := func(a, b time.Time) bool {
 		if a.Hour() < b.Hour() || (a.Hour() == b.Hour() && a.Minute() <= b.Minute()) {
 			return false
 		} else {
@@ -194,40 +196,49 @@ func AddEvent(ctx context.Context, b *bot.Bot, update *models.Update) {
 		fallthrough
 
 	case texts.ThisYear:
-
-		if state == texts.ThisYear && datam < int(today.Month()) {
-			errorSend()
-			return
+		if state == texts.ThisYear {
+			if datam < int(today.Month()) {
+				errorSend()
+				return
+			}
 		}
-		eventTime.year = dataM
+		fmt.Println(datam)
+		eventTime.mounth = datam
 		fallthrough
 
-	case texts.ThisMounth, texts.ThisWeek:
-
-		if state == texts.ThisMounth && dataD < today.Day() {
-			fmt.Println("Checker error")
-			errorSend()
-			return
+	case texts.ThisMounth:
+		if state == texts.ThisMounth {
+			if dataD < today.Day() {
+				fmt.Println("Checker error")
+				errorSend()
+				return
+			}
 		}
-		eventTime.year = dataD
+		eventTime.day = dataD
 		fallthrough
 
 	default:
 
-		dataTime, err := time.Parse("15:04", fmt.Sprintf("%d:%d", dataH, dataM))
+		dataTime, err := time.Parse("15:04", dataHM)
+		fmt.Println(dataHM)
 		if err != nil {
+			fmt.Println("Parse error")
 			errorSend()
 			return
 		}
-		if state == texts.Today && chekTime(today, dataTime) {
-			errorSend()
-			return
+
+		if state == texts.Today {
+			if checkTime(today, dataTime) {
+				fmt.Println("Checker error")
+				errorSend()
+				return
+			}
 		}
-		fmt.Println(chekTime(today, dataTime))
+
 		eventTime.hour = dataTime.Hour()
-		eventTime.day = dataTime.Day()
+		eventTime.minute = dataTime.Minute()
+
 		states.SetState(update.Message.From.ID, "")
-		fmt.Println(eventTime, eventTitle)
 	}
 
 	if states.GetState(userID) != "" {
@@ -235,7 +246,12 @@ func AddEvent(ctx context.Context, b *bot.Bot, update *models.Update) {
 		return
 	}
 
-	fmt.Println(eventTime, eventTitle)
+	fmt.Printf(
+		"%d:%d %d-%d-%d - %s",
+		eventTime.hour, eventTime.minute,
+		eventTime.day, eventTime.mounth, eventTime.year,
+		eventTitle)
+
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:      update.Message.Chat.ID,
 		Text:        "Событие создано",
